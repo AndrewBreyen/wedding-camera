@@ -1,0 +1,156 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Standalone disposable-camera app and backend.
+
+Parameters:
+  CameraPhotosPerGuest:
+    Type: Number
+    Default: 5
+    MinValue: 1
+    MaxValue: 20
+    Description: Maximum photos per browser session.
+  CameraAdminCodeHash:
+    Type: String
+    Default: ""
+    NoEcho: true
+    AllowedPattern: "^$|^[A-Fa-f0-9]{64}$"
+    Description: SHA-256 hex digest of the host-only camera admin code.
+
+Globals:
+  Function:
+    Runtime: nodejs24.x
+    Timeout: 20
+    MemorySize: 256
+
+Resources:
+  CameraApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins: ["*"]
+        AllowMethods: [GET, POST, DELETE, OPTIONS]
+        AllowHeaders: [content-type, authorization]
+        MaxAge: 600
+
+  CameraTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: cameraId
+          AttributeType: S
+        - AttributeName: itemId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: cameraId
+          KeyType: HASH
+        - AttributeName: itemId
+          KeyType: RANGE
+
+  CameraPhotosBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins: ["*"]
+            AllowedMethods: [PUT, GET, HEAD]
+            AllowedHeaders: ["*"]
+            MaxAge: 3600
+
+  CameraFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: backend/
+      Handler: src/handler.handler
+      Architectures: [arm64]
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref CameraTable
+          BUCKET_NAME: !Ref CameraPhotosBucket
+          CAMERA_PHOTOS_PER_GUEST: !Ref CameraPhotosPerGuest
+          CAMERA_ADMIN_CODE_HASH: !Ref CameraAdminCodeHash
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CameraTable
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:TransactWriteItems
+              Resource: !GetAtt CameraTable.Arn
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+                - s3:GetObject
+                - s3:DeleteObject
+              Resource: !Sub "${CameraPhotosBucket.Arn}/disposable/*"
+      Events:
+        CameraSessionRead:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref CameraApi
+            Path: /camera/session
+            Method: GET
+        CameraSessionWrite:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref CameraApi
+            Path: /camera/session
+            Method: POST
+        CameraUploads:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref CameraApi
+            Path: /camera/uploads
+            Method: POST
+        CameraComplete:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref CameraApi
+            Path: /camera/complete
+            Method: POST
+        CameraGallery:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref CameraApi
+            Path: /camera/photos
+            Method: GET
+        CameraMyPhotosRead:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref CameraApi
+            Path: /camera/my-photos
+            Method: GET
+        CameraMyPhotosDelete:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref CameraApi
+            Path: /camera/my-photos
+            Method: DELETE
+        CameraAdminPhotosRead:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref CameraApi
+            Path: /admin/camera/photos
+            Method: GET
+        CameraAdminPhotosDelete:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref CameraApi
+            Path: /admin/camera/photos
+            Method: DELETE
+Outputs:
+  ApiUrl:
+    Description: Configure this as VITE_API_URL when building the client.
+    Value: !Sub "https://${CameraApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}"

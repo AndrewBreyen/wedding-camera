@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180" viewBox="0 0 180 180">
+  <rect width="180" height="180" fill="#231f20"/>
+  <image href="wedding-floral-header.png" x="0" y="0" width="180" height="66" preserveAspectRatio="xMidYMid slice"/>
+  <path d="M34 88h112" stroke="#bca98f" stroke-width="1"/>
+  <text x="90" y="145" fill="#e9e0db" font-family="Georgia, serif" font-size="50" letter-spacing="1" text-anchor="middle">H&amp;M</text>
+</svg>
