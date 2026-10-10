@@ -106,8 +106,5 @@ export function deleteCameraPhoto(adminCode, { cameraId, photoId }) {
 }
 
 export function cameraEventUrl() {
-  const url = new URL(window.location.href);
-  url.search = "";
-  url.hash = "";
-  return url.toString();
+  return new URL(import.meta.env.BASE_URL, window.location.origin).toString();
 }

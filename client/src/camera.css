@@ -115,6 +115,9 @@ input { font: inherit; }
 .camera-empty { width: min(600px, 100%); margin: 16vh auto 0; text-align: center; }
 .camera-empty h1 { font-size: clamp(38px, 7vw, 58px); }
 .camera-empty-note { padding: 40px 20px; }
+.camera-not-found { display: grid; place-items: center; }
+.camera-not-found .camera-empty { margin: 0 auto; }
+.camera-not-found .camera-home-link { display: inline-block; margin-top: 18px; color: white; text-decoration: none; }
 .camera-photo-grid,
 .camera-admin-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 16px; max-width: 1160px; margin: 0 auto 30px; }
 .camera-gallery-photo,

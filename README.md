@@ -54,6 +54,8 @@ npm ci --prefix client
 Open http://localhost:5173. Camera access works on localhost after you grant
 browser permission. To test from a phone, use a secure deployment (for example
 GitHub Pages); browsers require HTTPS for camera access on other devices.
+The shooting screen, public gallery, personal roll, and host review are
+available at `/camera`, `/gallery`, `/my-photos`, and `/admin`.
 
 ## Publish on GitHub Pages
 

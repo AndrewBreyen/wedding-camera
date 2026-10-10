@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { QRCodeSVG } from "qrcode.react";
 import {
   cameraEventUrl,
   createCameraSession,
@@ -12,6 +11,11 @@ import {
   saveGuestDetails,
   uploadCameraPhoto,
 } from "../cameraApi";
+import CameraIntro from "./CameraIntro.jsx";
+import CameraShoot from "./CameraShoot.jsx";
+import MyPhotos from "./MyPhotos.jsx";
+import PhotoGallery from "./PhotoGallery.jsx";
+import ShareCameraModal from "./ShareCameraModal.jsx";
 
 function imageAsJpeg(file) {
   return createImageBitmap(file).then((bitmap) => new Promise((resolve, reject) => {
@@ -25,12 +29,26 @@ function imageAsJpeg(file) {
   }));
 }
 
-export default function DisposableCamera({ onBack }) {
+function screenFromLocation() {
+  const basePath = import.meta.env.BASE_URL;
+  const route = window.location.pathname.startsWith(basePath)
+    ? window.location.pathname.slice(basePath.length).replace(/^\/+|\/+$/g, "")
+    : "";
+  if (route === "camera" || route === "gallery" || route === "my-photos") {
+    return route === "my-photos" ? "myPhotos" : route;
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  const page = params.get("page");
+  if (page === "camera" || page === "gallery" || page === "my-photos") return page === "my-photos" ? "myPhotos" : page;
+  if (params.get("gallery") === "1") return "gallery";
+  if (params.get("my") === "1") return "myPhotos";
+  return "intro";
+}
+
+export default function DisposableCamera() {
   const [cameraId] = useState(() => getCameraId());
-  const [screen, setScreen] = useState(() => {
-    const params = new URLSearchParams(window.location.search);
-    return params.get("gallery") === "1" ? "gallery" : params.get("my") === "1" ? "myPhotos" : "intro";
-  });
+  const [screen, setScreenState] = useState(screenFromLocation);
   const [guest, setGuest] = useState(() => ({ name: "", email: "", ...getSavedGuestDetails() }));
   const [shotsUsed, setShotsUsed] = useState(0);
   const [shotLimit, setShotLimit] = useState(5);
@@ -38,7 +56,9 @@ export default function DisposableCamera({ onBack }) {
   const [photoPreview, setPhotoPreview] = useState(null);
   const [activePhotoId, setActivePhotoId] = useState(null);
   const [photos, setPhotos] = useState([]);
+  const [galleryLoading, setGalleryLoading] = useState(false);
   const [myPhotos, setMyPhotos] = useState([]);
+  const [myPhotosLoading, setMyPhotosLoading] = useState(false);
   const [facingMode, setFacingMode] = useState("environment");
   const [cameraUnavailable, setCameraUnavailable] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
@@ -50,18 +70,26 @@ export default function DisposableCamera({ onBack }) {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
 
+  function setScreen(nextScreen, { replace = false } = {}) {
+    setScreenState(nextScreen);
+    const slug = nextScreen === "myPhotos" ? "my-photos" : nextScreen;
+    const path = nextScreen === "intro" ? import.meta.env.BASE_URL : `${import.meta.env.BASE_URL}${slug}`;
+    window.history[replace ? "replaceState" : "pushState"]({}, "", path);
+  }
+
+  useEffect(() => {
+    const handlePopState = () => setScreenState(screenFromLocation());
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
   useEffect(() => {
     let mounted = true;
-    const loadGallery = new URLSearchParams(window.location.search).get("gallery") === "1";
-    Promise.all([getCameraSession(cameraId), loadGallery ? getCameraPhotos() : Promise.resolve(null)])
-      .then(([session, gallery]) => {
+    getCameraSession(cameraId)
+      .then((session) => {
         if (!mounted) return;
         setShotsUsed(session.shotsUsed);
         setShotLimit(session.shotLimit);
-        if (gallery) {
-          setPhotos(gallery.photos);
-          setScreen("gallery");
-        }
       })
       .catch((err) => mounted && setError(err.message))
       .finally(() => mounted && setLoading(false));
@@ -69,10 +97,25 @@ export default function DisposableCamera({ onBack }) {
   }, [cameraId]);
 
   useEffect(() => {
-    if (screen !== "myPhotos") return;
+    if (screen !== "gallery") return undefined;
+    let active = true;
+    setGalleryLoading(true);
+    getCameraPhotos()
+      .then((result) => active && setPhotos(result.photos))
+      .catch((err) => active && setError(err.message))
+      .finally(() => active && setGalleryLoading(false));
+    return () => { active = false; };
+  }, [screen]);
+
+  useEffect(() => {
+    if (screen !== "myPhotos") return undefined;
+    let active = true;
+    setMyPhotosLoading(true);
     getMyCameraPhotos(cameraId)
-      .then((result) => setMyPhotos(result.photos))
-      .catch((err) => setError(err.message));
+      .then((result) => active && setMyPhotos(result.photos))
+      .catch((err) => active && setError(err.message))
+      .finally(() => active && setMyPhotosLoading(false));
+    return () => { active = false; };
   }, [cameraId, screen]);
 
   useEffect(() => {
@@ -163,21 +206,8 @@ export default function DisposableCamera({ onBack }) {
   }
 
   async function showMyPhotos() {
-    setBusy(true);
     setError("");
-    try {
-      const result = await getMyCameraPhotos(cameraId);
-      setMyPhotos(result.photos);
-      setScreen("myPhotos");
-      const url = new URL(window.location.href);
-      url.searchParams.set("my", "1");
-      url.searchParams.delete("gallery");
-      window.history.replaceState({}, "", url);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setBusy(false);
-    }
+    setScreen("myPhotos");
   }
 
   async function removeMyPhoto(photoId) {
@@ -215,20 +245,8 @@ export default function DisposableCamera({ onBack }) {
   }
 
   async function showGallery() {
-    setBusy(true);
     setError("");
-    try {
-      const result = await getCameraPhotos();
-      setPhotos(result.photos);
-      setScreen("gallery");
-      const url = new URL(window.location.href);
-      url.searchParams.set("gallery", "1");
-      window.history.replaceState({}, "", url);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setBusy(false);
-    }
+    setScreen("gallery");
   }
 
   async function copyEventLink() {
@@ -242,32 +260,21 @@ export default function DisposableCamera({ onBack }) {
 
   if (screen === "myPhotos") {
     return (
-      <main className="camera-page camera-gallery-page">
-        <div className="camera-topline"><button className="btn-text" onClick={() => setScreen(shotsUsed > 0 ? "camera" : "intro")}>← Your camera</button><span>Your private photo roll</span></div>
-        <section className="camera-heading"><p className="camera-kicker">Only visible in this browser</p><h1>My photos</h1><p>{myPhotos.length} saved {myPhotos.length === 1 ? "photo" : "photos"} · {Math.max(shotLimit - shotsUsed, 0)} shots left</p></section>
-        {myPhotos.length === 0 ? <p className="camera-empty-note">Your roll is empty so far. Take a photo and it will appear here.</p> : (
-          <div className="camera-photo-grid">
-            {myPhotos.map((item) => <figure className="camera-gallery-photo" key={item.id}><img src={item.photoUrl} alt="Your photo" /><figcaption><span>{new Date(item.createdAt).toLocaleString()}</span><button className="btn-text camera-delete" onClick={() => removeMyPhoto(item.id)} disabled={busy}>Delete</button></figcaption></figure>)}
-          </div>
-        )}
-        {error && <p className="camera-message">{error}</p>}
-      </main>
+      <MyPhotos
+        shotsUsed={shotsUsed}
+        shotLimit={shotLimit}
+        photos={myPhotos}
+        loading={myPhotosLoading}
+        busy={busy || myPhotosLoading}
+        error={error}
+        onBack={() => setScreen(shotsUsed > 0 ? "camera" : "intro")}
+        onDelete={removeMyPhoto}
+      />
     );
   }
 
   if (screen === "gallery") {
-    return (
-      <main className="camera-page camera-gallery-page">
-        <div className="camera-topline"><button className="btn-text" onClick={() => setScreen("intro")}>← Camera</button><span>Matt &amp; Hailey · Guest photos</span></div>
-        <section className="camera-heading"><p className="camera-kicker">Guest photo roll</p><h1>Everyone’s point of view</h1><p>{photos.length} guest photos · new photos appear as they’re added</p></section>
-        {photos.length === 0 ? <p className="camera-empty-note">No photos yet. Guest photos will appear here as soon as they’re added.</p> : (
-          <div className="camera-photo-grid">
-            {photos.map((item) => <figure className="camera-gallery-photo" key={item.id}><img src={item.photoUrl} alt={`Photo shared by ${item.name}`} /><figcaption>{item.name}</figcaption></figure>)}
-          </div>
-        )}
-        <button className="btn-text camera-footer-link" onClick={onBack}>Back to camera</button>
-      </main>
-    );
+    return <PhotoGallery photos={photos} loading={galleryLoading} error={error} onBack={() => setScreen("intro")} />;
   }
 
   return (
@@ -276,32 +283,39 @@ export default function DisposableCamera({ onBack }) {
       <section className="camera-brand"><p className="camera-kicker">Matt &amp; Hailey’s wedding</p><h1>Disposable camera</h1><p className="camera-lede">A little roll of the moments only you saw.</p></section>
 
       {loading ? <p className="camera-status">Loading your camera…</p> : screen === "intro" ? (
-        <form className="camera-card camera-form" onSubmit={beginRoll}>
-          <div className="camera-roll-badge">{Math.max(shotLimit - shotsUsed, 0)} shots left</div>
-          <label>Your name<input value={guest.name} onChange={(event) => setGuest({ ...guest, name: event.target.value })} maxLength={80} autoComplete="name" required /></label>
-          <label>Email <span>(optional)</span><input type="email" value={guest.email} onChange={(event) => setGuest({ ...guest, email: event.target.value })} maxLength={254} autoComplete="email" /></label>
-          <p className="camera-privacy">Your name appears with your photos. Email is optional and only visible to the hosts. No account needed.</p>
-          <button className="btn btn-primary" type="submit" disabled={busy || shotsUsed >= shotLimit}>{shotsUsed >= shotLimit ? "Your roll is full" : busy ? "Opening camera…" : "Get your camera"}</button>
-          <p className="camera-limit-note">Your roll is saved on this browser. You can take up to {shotLimit} photos.</p>
-        </form>
+        <CameraIntro
+          guest={guest}
+          onGuestChange={setGuest}
+          shotsUsed={shotsUsed}
+          shotLimit={shotLimit}
+          busy={busy}
+          onBegin={beginRoll}
+        />
       ) : (
-        <section className="camera-card camera-shoot-card">
-          <div className="camera-shoot-header"><div><p className="camera-kicker">{guest.name}</p><h2>Your roll</h2></div><span className="camera-roll-badge">{Math.max(shotLimit - shotsUsed, 0)} left</span></div>
-          {photoPreview ? <div className="camera-preview"><img src={photoPreview} alt="Your photo preview" /></div> : cameraUnavailable ? (
-            <button className="camera-viewfinder" onClick={() => fileInput.current?.click()} disabled={busy || shotsUsed >= shotLimit}>
-              <span className="camera-viewfinder-icon">◎</span><span>Camera unavailable · Choose a photo</span>
-            </button>
-          ) : <div className="camera-viewfinder camera-live-view"><video ref={videoRef} autoPlay playsInline muted aria-label="Live camera preview" onLoadedMetadata={() => setCameraReady(true)} />{!cameraReady && <span className="camera-video-hint">Starting camera…</span>}</div>}
-          <input ref={fileInput} className="camera-file-input" type="file" accept="image/*" onChange={choosePhoto} />
-          {photoPreview ? <div className="camera-action-row"><button className="btn btn-secondary" onClick={() => { setPhoto(null); setPhotoPreview(null); setActivePhotoId(null); }} disabled={busy}>Retake</button><button className="btn btn-primary" onClick={addPhoto} disabled={busy}>{busy ? "Adding to roll…" : "Use this shot"}</button></div> : shotsUsed < shotLimit ? <><button className="camera-shutter" onClick={cameraUnavailable ? () => fileInput.current?.click() : capturePhoto} disabled={busy || (!cameraUnavailable && !cameraReady)} aria-label="Take a photo" /><div className="camera-camera-actions">{!cameraUnavailable && <button className="btn-text" onClick={() => setFacingMode((mode) => mode === "environment" ? "user" : "environment")}>Switch camera</button>}<button className="btn-text" onClick={() => fileInput.current?.click()}>Choose a photo</button></div></> : <p className="camera-limit-note">That’s the whole roll. Thanks for capturing the day.</p>}
-          {shotsUsed > 0 && <button className="btn-text camera-gallery-link" onClick={showMyPhotos} disabled={busy}>View or delete my photos</button>}
-          {shotsUsed > 0 && <button className="btn-text camera-gallery-link" onClick={showGallery} disabled={busy}>View the public photo roll</button>}
-        </section>
+        <CameraShoot
+          guestName={guest.name}
+          shotsUsed={shotsUsed}
+          shotLimit={shotLimit}
+          photoPreview={photoPreview}
+          cameraUnavailable={cameraUnavailable}
+          cameraReady={cameraReady}
+          videoRef={videoRef}
+          fileInput={fileInput}
+          busy={busy}
+          onCameraReady={() => setCameraReady(true)}
+          onChoosePhoto={choosePhoto}
+          onCapturePhoto={capturePhoto}
+          onSwitchCamera={() => setFacingMode((mode) => mode === "environment" ? "user" : "environment")}
+          onRetake={() => { setPhoto(null); setPhotoPreview(null); setActivePhotoId(null); }}
+          onAddPhoto={addPhoto}
+          onShowMyPhotos={showMyPhotos}
+          onShowGallery={showGallery}
+        />
       )}
       {error && <p className="camera-message">{error}</p>}
-      <div className="camera-bottom-links"><button className="btn-text" onClick={showGallery}>Photo gallery</button><a className="btn-text" href={`${window.location.pathname}?camera-admin=1`}>Host review</a></div>
+      <div className="camera-bottom-links"><button className="btn-text" onClick={showGallery}>Photo gallery</button><a className="btn-text" href={`${import.meta.env.BASE_URL}admin`}>Host review</a></div>
 
-      {showQr && <div className="camera-modal-backdrop" role="presentation" onClick={() => setShowQr(false)}><section className="camera-qr-modal" role="dialog" aria-modal="true" aria-label="Share the event camera" onClick={(event) => event.stopPropagation()}><button className="camera-modal-close" onClick={() => setShowQr(false)} aria-label="Close">×</button><p className="camera-kicker">Share the camera</p><h2>Scan to take a few shots</h2><div className="camera-qr-code"><QRCodeSVG value={cameraEventUrl()} size={232} level="M" /></div><p>Open your phone camera and scan this code.</p><button className="btn btn-primary" onClick={copyEventLink}>Copy event link</button></section></div>}
+      {showQr && <ShareCameraModal eventUrl={cameraEventUrl()} onClose={() => setShowQr(false)} onCopy={copyEventLink} />}
     </main>
   );
 }

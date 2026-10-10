@@ -48,6 +48,9 @@ jobs:
           VITE_BASE_PATH: /wedding-camera/
         run: npm run build
 
+      - name: Configure GitHub Pages route fallback
+        run: cp client/dist/index.html client/dist/404.html
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
