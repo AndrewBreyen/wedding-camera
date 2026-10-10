@@ -1,4 +1,4 @@
-# Matt & Hailey's Disposable Camera
+# Hailey & Matt's Disposable Camera
 
 A standalone, mobile-first disposable-camera app for wedding guests. Guests
 can share up to five photos from a browser without creating an account. Photos

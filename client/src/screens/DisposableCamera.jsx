@@ -279,8 +279,8 @@ export default function DisposableCamera() {
 
   return (
     <main className="camera-page">
-      <div className="camera-topline"><span>Matt &amp; Hailey · Event camera</span><button className="btn-text" onClick={() => setShowQr(true)}>Share event QR</button></div>
-      <section className="camera-brand"><p className="camera-kicker">Matt &amp; Hailey’s wedding</p><h1>Disposable camera</h1><p className="camera-lede">A little roll of the moments only you saw.</p></section>
+      <div className="camera-topline"><span>Hailey &amp; Matt · Event camera</span><button className="btn-text" onClick={() => setShowQr(true)}>Share event QR</button></div>
+      <section className="camera-brand"><p className="camera-kicker">Disposable camera</p><h1>Hailey &amp; Matt’s wedding</h1><p className="camera-lede">A little roll of the moments only you saw.</p></section>
 
       {loading ? <p className="camera-status">Loading your camera…</p> : screen === "intro" ? (
         <CameraIntro
