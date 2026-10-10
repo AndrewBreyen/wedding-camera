@@ -58,5 +58,5 @@ GitHub Pages); browsers require HTTPS for camera access on other devices.
 ## Publish on GitHub Pages
 
 Set the repository's Pages source to **GitHub Actions**, add the public API
-endpoint as the `VITE_API_URL` Actions variable, and run **Deploy wedding camera
-to GitHub Pages** from the Actions tab.
+endpoint as the `VITE_API_URL` Actions variable, then push changes to `main` to
+build and deploy the site automatically.
